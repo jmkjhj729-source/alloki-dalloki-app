@@ -18,8 +18,9 @@ Example:
 from __future__ import annotations
 import streamlit as st
 
-APP_PASSWORD = st.secrets.get("APP_PASSWORD", "")
-PUBLIC_DEMO = st.secrets.get("PUBLIC_DEMO", False)
+APP_PASSWORD = "test1234"   # 임시 비밀번호
+PUBLIC_DEMO = True          # 공개 데모 ON
+
 
 import argparse
 import json
