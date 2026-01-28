@@ -64,32 +64,31 @@ def offer_plan(offer_code: str, season: str, days_arg: int, bonus_arg: int) -> T
 
 def thumb_copy_for_offer(offer_code: str, season: str) -> Dict[str, str]:
     oc = (offer_code or "").upper()
- if oc == "SEASONPACK":
-    season_kr = {
-        "spring": "봄",
-        "summer": "여름",
-        "autumn": "가을",
-        "winter": "겨울",
-    }.get(season, season)
 
-    return {
-        "A": f"{season_kr} 시즌팩 21+3 오늘의 마음을 꺼내요",
-        "B": f"{season_kr} 시즌팩 21+3 지금 안 사면 늦겠어요",
-        "C": f"{season_kr} 시즌팩 21+3 프리미엄 한정",
-    }
+    if oc == "SEASONPACK":
+        season_kr = {
+            "spring": "봄",
+            "summer": "여름",
+            "autumn": "가을",
+            "winter": "겨울",
+        }.get(season, season)
+
+        return {
+            "A": f"{season_kr} 시즌팩 21+3 오늘의 마음을 꺼내요",
+            "B": f"{season_kr} 시즌팩 21+3 지금 안 사면 늦었어요",
+            "C": f"{season_kr} 시즌팩 21+3 프리미엄 한정",
+        }
+
     if oc == "D7":
-        return {"A":"7일 카드 · 오늘의 마음", "B":"7일 카드 · 지금 시작", "C":"7일 카드 · 가볍게 힐링"}
+        return {"A": "7일 카드 · 오늘의 마음", "B": "7일 카드 · 지금 시작", "C": "7일 카드 · 가볍게"}
     if oc == "D14":
-        return {"A":"14일 카드 · 마음 회복", "B":"14일 카드 · 놓치면 후회", "C":"14일 카드 · 프리미엄"}
+        return {"A": "14일 카드 · 마음 회복", "B": "14일 카드 · 놓치면 후회", "C": "14일 카드 · 프리미엄"}
     if oc == "D21":
-        return {"A":"21일 카드 · 마음 루틴", "B":"21일 카드 · 지금이 타이밍", "C":"21일 카드 · 프리미엄"}
+        return {"A": "21일 카드 · 마음 루틴", "B": "21일 카드 · 지금이 타이밍", "C": "21일 카드 · 프리미엄"}
+
     return THUMB_COPY_DEFAULT.copy()
 
 def ensure_dir(p: Path): p.mkdir(parents=True, exist_ok=True)
-
-
-
-
 
 def compute_countdown(deadline: str, fallback_days: int) -> int:
     """
@@ -105,7 +104,6 @@ def compute_countdown(deadline: str, fallback_days: int) -> int:
         return max(0, int(delta))
     except Exception:
         return int(fallback_days)
-
 
 def seasonpack_stage_labels(days_left: int) -> tuple[str,str]:
     """
@@ -454,7 +452,6 @@ def render_square_card(base_path: Path, out_path: Path, title: str, body: str, m
     out_path.parent.mkdir(parents=True, exist_ok=True)
     im.convert("RGB").save(out_path, "PNG")
 
-
 def _load_json(path: str) -> dict:
     p = Path(path)
     if p.exists():
@@ -530,7 +527,6 @@ if args.funnel_mode == "comment_landing" and args.platform.lower() in ["instagra
         landing = build_landing_payload(pl, args.landing_destination_url)
         write_json(out_dir/"landing_payload.json", landing)
         
-
 # generate landing variants with coupon copy + optional tracking
 coupon_code = pl.get("coupon_code","")
 landing_files = write_landing_html_variants(
@@ -643,8 +639,6 @@ def urgency_stage(minutes_left: float, hours_left: float, use_urgency: bool, use
     if hours_left <= 3: return "H3"
     if hours_left <= 6: return "H6"
     return "NORMAL"
-
-
 
 def read_webhook_state_ext(state_file: str):
     try:
@@ -895,7 +889,6 @@ raw_days_t, h_left, m_left, expired_time = compute_time_left(args.deadline, args
         print("ERROR: Please set OPENAI_API_KEY", file=sys.stderr)
         sys.exit(1)
 
-    
 # compute countdown (D-N)
 cd, raw_delta, expired = compute_deadline_info(args.deadline, args.countdown_days)
 cards = load_cards_xlsx(Path(args.xlsx), args.sheet)
@@ -997,8 +990,7 @@ bonus_link = url_map.get(Path(bonus_assets["square"]).name, bonus_assets["square
 except Exception:
     pass
 
-
-            square_to_story(sq, args.story_preset).save(out_root/f"THUMBNAIL_{v}_9x16.png","PNG")
+          square_to_story(sq, args.story_preset).save(out_root/f"THUMBNAIL_{v}_9x16.png","PNG")
 
     # Day cards
     from urllib.parse import urlencode
@@ -1056,7 +1048,6 @@ except Exception:
                 openai_img(build_prompt(args.season, cta_kind, "A", info.get("mood",""), info.get("color",""), info.get("price",""), offer_code=args.offer_code), cta_base, api_key, MODEL, API_SIZE)
                 cta_sq = cards_dir/f"{day}{suffix}_CTA.png"
                 
-
 # CTA (story last cut) – SEASONPACK 2-step CTA
 if args.offer_code.upper() == "SEASONPACK":
     title, body, price, cta = seasonpack_cta_copy(args.platform, args.season, cd, args.segment)
@@ -1150,7 +1141,6 @@ if args.cta_t1_video:
 
 else:
     pass(cards_dir/f"{day}{suffix}_CTA_9x16.png","PNG")
-
 
 # Bonus cards (SEASONPACK)
 if args.offer_code.upper() == "SEASONPACK" and bonus_n > 0:
