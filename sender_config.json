@@ -1,0 +1,22 @@
+{
+  "kakao_i_alimtalk": {
+    "base_url": "https://YOUR_BIZMESSAGE_HOST",
+    "oauth_token_url": "https://YOUR_OAUTH_TOKEN_ENDPOINT",
+    "client_id": "YOUR_CLIENT_ID",
+    "client_secret": "YOUR_CLIENT_SECRET",
+    "sender_key": "YOUR_SENDER_KEY_OR_PFID",
+    "template_code": "YOUR_TEMPLATE_CODE",
+    "to_phone": "01012345678"
+  },
+  "solapi_sms": {
+    "api_key": "YOUR_SOLAPI_API_KEY",
+    "api_secret": "YOUR_SOLAPI_API_SECRET",
+    "from_phone": "029302266",
+    "to_phone": "01012345678"
+  },
+  "instagram_dm": {
+    "page_access_token": "YOUR_PAGE_ACCESS_TOKEN",
+    "recipient_ig_scoped_id": "IGSID",
+    "api_version": "v20.0"
+  }
+}

@@ -1,0 +1,74 @@
+{
+  "top": {
+    "box_anchor": "top",
+    "box_width_ratio": 0.86,
+    "box_y_ratio": 0.08,
+    "padding": 26,
+    "font_size": 44,
+    "line_height": 56,
+    "box_rgba": [
+      255,
+      255,
+      255,
+      185
+    ],
+    "text_rgba": [
+      40,
+      35,
+      32,
+      255
+    ],
+    "badge": {
+      "enabled": true,
+      "y_ratio": 0.02
+    }
+  },
+  "middle": {
+    "box_anchor": "middle",
+    "box_width_ratio": 0.86,
+    "box_y_ratio": 0.44,
+    "padding": 26,
+    "font_size": 44,
+    "line_height": 56,
+    "box_rgba": [
+      255,
+      255,
+      255,
+      185
+    ],
+    "text_rgba": [
+      40,
+      35,
+      32,
+      255
+    ],
+    "badge": {
+      "enabled": true,
+      "y_ratio": 0.36
+    }
+  },
+  "bottom": {
+    "box_anchor": "bottom",
+    "box_width_ratio": 0.9,
+    "box_y_ratio": 0.72,
+    "padding": 26,
+    "font_size": 44,
+    "line_height": 56,
+    "box_rgba": [
+      255,
+      255,
+      255,
+      185
+    ],
+    "text_rgba": [
+      40,
+      35,
+      32,
+      255
+    ],
+    "badge": {
+      "enabled": true,
+      "y_ratio": 0.64
+    }
+  }
+}
