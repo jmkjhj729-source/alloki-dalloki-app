@@ -21,10 +21,14 @@ from PIL import Image, ImageDraw, ImageFont, ImageFilter
 import qrcode
 import openpyxl
 
+# ✅ 여기! (공백 없이 왼쪽 끝)
+api_key = os.environ.get("OPENAI_API_KEY", "").strip()
+
 OUT_SQUARE = (1080, 1080)
 OUT_STORY  = (1080, 1920)
 API_SIZE   = "1024x1024"
 MODEL      = "gpt-image-1"
+
 
 BASE_PROMPT = (
     "Two adorable pastel rainbow baby poodles, Alloki and Dalloki, "
