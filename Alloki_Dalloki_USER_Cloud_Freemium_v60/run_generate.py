@@ -67,11 +67,11 @@ def thumb_copy_for_offer(offer_code: str, season: str) -> Dict[str,str]:
     if oc == "SEASONPACK":
         # A=공감형, B=긴급형, C=프리미엄형 느낌 유지
         season_kr = {"spring":"봄","summer":"여름","autumn":"가을","winter":"겨울"}.get(season, season)
-   return {
-    "A": f"{season_kr} 시즌팩 21+3 오늘의 마음을 꺼내요",
-    "B": f"{season_kr} 시즌팩 21+3 지금 안 사면 늦춰요",
-    "C": f"{season_kr} 시즌팩 21+3 프리미엄 한정",
-}
+       return {
+         "A": f"{season_kr} 시즌팩 21+3 오늘의 마음을 꺼내요",
+         "B": f"{season_kr} 시즌팩 21+3 지금 안 사면 늦겠어요",
+         "C": f"{season_kr} 시즌팩 21+3 프리미엄 한정",
+     }
 
     if oc == "D7":
         return {"A":"7일 카드 · 오늘의 마음", "B":"7일 카드 · 지금 시작", "C":"7일 카드 · 가볍게 힐링"}
