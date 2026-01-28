@@ -1,1 +1,1 @@
-# allok i-dallok i-app
+# allok-i dallok-i app
