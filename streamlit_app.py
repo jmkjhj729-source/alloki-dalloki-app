@@ -15,7 +15,11 @@ if st.button("🐼 알록이 시작하기"):
     st.write("v60 실행중... 잠시만요 🐾")
 
     # ✅ 먼저 '테스트용'으로 v60 도움말(-h) 실행 (정상 연결 확인용)
-    cmd = [sys.executable, str(V60_APP), "-h"]
+    cmd = [
+    sys.executable,
+    str(V60_APP),
+    "run_week"
+]
 
     result = subprocess.run(
         cmd,
