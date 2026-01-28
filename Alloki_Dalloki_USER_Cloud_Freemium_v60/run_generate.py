@@ -28,7 +28,7 @@ BASE_PROMPT = (
     "ivory tone, clean composition, emotional but quiet mood, storybook style, high resolution. "
     "Leave generous empty space for text overlay. "
     "No text, no letters, no watermark."
-)SEASON_ADDONS = {
+SEASON_ADDONS = {
     "spring": "Soft peach and cream background, spring light.",
     "summer": "Soft mint and ivory background, cool calm mood.",
     "autumn": "Oatmeal and warm brown background, reflective mood.",
