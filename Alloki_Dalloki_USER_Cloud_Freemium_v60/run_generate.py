@@ -1,201 +1,234 @@
 # run_generate.py
-# ------------------------------------------------------------
-# Alloki & Dalloki - Clean, Safe, No-indentation-error version
-# 버튼 클릭 -> 문구 생성 -> 시즌팩 분기 -> (샘플) 이미지 생성
-# ------------------------------------------------------------
+# v60: button click -> real actions
+# - season pack branching
+# - copy(text) generation
+# - real image generation via OpenAI Images API (gpt-image-1)
 
 from __future__ import annotations
 
+import os
+import base64
 from dataclasses import dataclass
+from io import BytesIO
 from pathlib import Path
 from typing import Dict, Optional, Tuple
-import datetime
+
+from PIL import Image
+from openai import OpenAI
+
 
 # -----------------------------
-# 기본 설정
+# Config
 # -----------------------------
-OUT_SQUARE: Tuple[int, int] = (1080, 1080)
-OUT_STORY: Tuple[int, int] = (1080, 1920)
+MODEL = "gpt-image-1"
+SIZE_SQUARE = "1024x1024"
+SIZE_STORY = "1024x1536"  # 세로(숏폼/스토리 느낌)
 
-BASE_PROMPT: str = (
+OUT_DIR = Path("outputs_v60")
+OUT_DIR.mkdir(parents=True, exist_ok=True)
+
+BASE_PROMPT = (
     "Two adorable pastel rainbow baby poodles, Alloki and Dalloki. "
-    "Sitting calmly side by side, gentle expressions, minimal background. "
-    "Ivory tone, clean composition, emotional but quiet mood, storybook style. "
-    "Leave generous empty space for text overlay. No text, no letters, no watermark."
+    "They are fluffy and cute, with big sparkling eyes, gentle expressions. "
+    "Soft lighting, clean composition, storybook illustration style, high detail fur. "
+    "No text, no letters, no watermark. "
 )
 
 SEASON_ADDONS: Dict[str, str] = {
-    "spring": "Soft peach and cream background, spring light.",
-    "summer": "Soft mint and ivory background, cool calm mood.",
-    "autumn": "Oatmeal and warm brown background, reflective mood.",
-    "winter": "Ivory and light gray-blue background, soft winter light.",
-    "yearend_bundle": "Four-season subtle gradient ring, premium calm feeling.",
+    "spring": "Soft peach and cream background, warm spring light, fresh and tender mood.",
+    "summer": "Soft mint and ivory background, cool calm mood, gentle summer light.",
+    "autumn": "Oatmeal and warm brown background, cozy reflective mood, soft golden light.",
+    "winter": "Ivory and light gray-blue background, calm winter mood, soft cool light.",
+    "yearend_bundle": "Four-season subtle gradient ring feeling, premium calm mood, gift-like atmosphere.",
 }
 
+# 기본 문구(일반 상품)
+THUMB_COPY_DEFAULT: Dict[str, str] = {
+    "A": "오늘의 마음을 꺼내보세요",
+    "B": "지금 안 보면 놓쳐요",
+    "C": "사계절을 건너온 마음",
+}
+
+
 # -----------------------------
-# 결과 타입
+# Helpers
+# -----------------------------
+def _get_api_key() -> str:
+    """
+    Streamlit Cloud에서는 보통 Secrets에 넣지만,
+    여기서는 환경변수 OPENAI_API_KEY를 기본으로 사용.
+    """
+    key = os.environ.get("OPENAI_API_KEY", "").strip()
+    if not key:
+        raise RuntimeError(
+            "OPENAI_API_KEY가 비어있어요. Streamlit Cloud → Settings → Secrets 에 "
+            "OPENAI_API_KEY를 설정하거나, 환경변수로 넣어주세요."
+        )
+    return key
+
+
+def _openai_client() -> OpenAI:
+    # openai 라이브러리는 환경변수 OPENAI_API_KEY를 자동 사용 가능하지만,
+    # 확실하게 하기 위해 setdefault로 넣어줌
+    os.environ.setdefault("OPENAI_API_KEY", _get_api_key())
+    return OpenAI()
+
+
+def _save_image_bytes(image_bytes: bytes, out_path: Path) -> None:
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(out_path, "wb") as f:
+        f.write(image_bytes)
+
+
+def _image_bytes_to_pil(image_bytes: bytes) -> Image.Image:
+    return Image.open(BytesIO(image_bytes)).convert("RGBA")
+
+
+def _generate_image_bytes(
+    client: OpenAI,
+    prompt: str,
+    size: str = SIZE_SQUARE,
+    output_format: str = "png",
+) -> bytes:
+    """
+    OpenAI Images API로 실제 이미지 생성.
+    공식 예시: client.images.generate(model="gpt-image-1", prompt=..., size="1024x1024") :contentReference[oaicite:1]{index=1}
+    """
+    result = client.images.generate(
+        model=MODEL,
+        prompt=prompt,
+        size=size,
+        output_format=output_format,
+    )
+    b64 = result.data[0].b64_json
+    return base64.b64decode(b64)
+
+
+# -----------------------------
+# Business Logic (Offer / Copy)
 # -----------------------------
 @dataclass
-class RunResult:
-    ok: bool
-    msg: str
-    user_name: str
-    season: str
-    offer_code: str
-    plan_label: str
-    copy: Dict[str, str]              # {"A": "...", "B": "...", "C": "..."}
-    image_path: Optional[str]         # 생성된 이미지 경로(샘플)
-    created_at: str
+class OfferPlan:
+    days: int
+    bonus: int
+    label: str
 
 
-# -----------------------------
-# 1) 플랜/시즌팩 분기
-# -----------------------------
-def offer_plan(offer_code: str, season: str) -> Tuple[int, int, str]:
+def offer_plan(offer_code: str, bonus_arg: int = 0) -> OfferPlan:
     """
-    returns: (days, bonus, label)
+    offer_code:
+      - D7 / D14 / D21 : 고정 기간
+      - SEASONPACK     : 시즌팩(21일 + 보너스 기본 3일)
+      - 기타           : 커스텀(여기서는 기본값으로 처리)
     """
-    oc = (offer_code or "").upper().strip()
+    oc = (offer_code or "").strip().upper()
 
     if oc == "D7":
-        return 7, 0, "7일 카드"
+        return OfferPlan(days=7, bonus=0, label="7일")
     if oc == "D14":
-        return 14, 0, "14일 카드"
+        return OfferPlan(days=14, bonus=0, label="14일")
     if oc == "D21":
-        return 21, 0, "21일 카드"
+        return OfferPlan(days=21, bonus=0, label="21일")
     if oc == "SEASONPACK":
-        # 시즌팩은 21+3 같은 느낌
-        return 21, 3, f"{season} 시즌팩"
-    # default
-    return 7, 0, "7일 카드"
+        bonus = bonus_arg if bonus_arg else 3
+        return OfferPlan(days=21, bonus=bonus, label="시즌팩")
+
+    # fallback
+    return OfferPlan(days=21, bonus=0, label="custom")
 
 
-# -----------------------------
-# 2) 문구 생성 (A/B/C)
-# -----------------------------
 def thumb_copy_for_offer(offer_code: str, season: str) -> Dict[str, str]:
-    oc = (offer_code or "").upper().strip()
-    sk = (season or "spring").lower().strip()
-    season_kr = {"spring": "봄", "summer": "여름", "autumn": "가을", "winter": "겨울"}.get(sk, "시즌")
+    """
+    버튼 클릭 시 “문구 생성/분기”가 여기서 결정됨.
+    - SEASONPACK이면 시즌명 포함 문구로 자동 변환
+    - 그 외는 기본 문구 사용
+    """
+    oc = (offer_code or "").strip().upper()
+    season_key = (season or "").strip().lower()
 
-    # 기본 문구(일반)
-    if oc in ("D7", "D14", "D21"):
-        if oc == "D7":
-            days = "7일"
-        elif oc == "D14":
-            days = "14일"
-        else:
-            days = "21일"
-
-        return {
-            "A": f"{days} 카드 · 오늘의 마음",
-            "B": f"{days} 카드 · 지금 시작",
-            "C": f"{days} 카드 · 프리미엄",
-        }
-
-    # 시즌팩 문구
     if oc == "SEASONPACK":
+        season_kr = {
+            "spring": "봄",
+            "summer": "여름",
+            "autumn": "가을",
+            "winter": "겨울",
+            "yearend_bundle": "연말",
+        }.get(season_key, "시즌")
+
+        # ✅ f-string 따옴표/쉼표/괄호 오류 안 나게 “한 줄 문자열”로 안전하게 작성
         return {
-            "A": f"{season_kr} 시즌팩 21+3 · 오늘의 마음",
+            "A": f"{season_kr} 시즌팩 21+3 · 오늘의 마음을 꺼내요",
             "B": f"{season_kr} 시즌팩 21+3 · 지금 안 사면 늦어요",
             "C": f"{season_kr} 시즌팩 21+3 · 프리미엄 한정",
         }
 
-    # fallback
-    return {
-        "A": "오늘의 마음을 꺼내보세요",
-        "B": "지금 안 보면 놓쳐요",
-        "C": "사계절을 건너온 마음",
-    }
+    return dict(THUMB_COPY_DEFAULT)
+
+
+def build_prompt(season: str, mood: str = "calm") -> str:
+    """
+    이미지 프롬프트는 BASE + 시즌 추가문구로 구성
+    """
+    season_key = (season or "").strip().lower()
+    addon = SEASON_ADDONS.get(season_key, "")
+    mood_txt = f"Overall mood: {mood}. " if mood else ""
+    return BASE_PROMPT + mood_txt + addon
 
 
 # -----------------------------
-# 3) 프롬프트 만들기
+# Main entrypoint for Streamlit button
 # -----------------------------
-def build_prompt(user_name: str, season: str, plan_label: str) -> str:
-    sk = (season or "spring").lower().strip()
-    addon = SEASON_ADDONS.get(sk, "")
-    return (
-        f"{BASE_PROMPT}\n"
-        f"Season addon: {addon}\n"
-        f"User: {user_name}\n"
-        f"Plan: {plan_label}\n"
-        f"Make one cohesive heartwarming scene."
+@dataclass
+class GenerateResult:
+    prompt: str
+    offer: OfferPlan
+    copy: Dict[str, str]
+    image_path: Path
+
+
+def run_generate(
+    *,
+    offer_code: str = "SEASONPACK",
+    season: str = "spring",
+    mood: str = "calm",
+    out_name: str = "alloki_dalloki.png",
+    size: str = SIZE_SQUARE,
+) -> GenerateResult:
+    """
+    ✅ Streamlit 버튼 클릭 시 이 함수만 호출하면 됨.
+    """
+    client = _openai_client()
+
+    offer = offer_plan(offer_code=offer_code)
+    copy = thumb_copy_for_offer(offer_code=offer_code, season=season)
+
+    prompt = build_prompt(season=season, mood=mood)
+    img_bytes = _generate_image_bytes(client, prompt=prompt, size=size, output_format="png")
+
+    out_path = OUT_DIR / out_name
+    _save_image_bytes(img_bytes, out_path)
+
+    return GenerateResult(
+        prompt=prompt,
+        offer=offer,
+        copy=copy,
+        image_path=out_path,
     )
 
 
 # -----------------------------
-# 4) (샘플) 이미지 생성 - 항상 성공하는 안전 버전
-#    -> PIL이 없으면 텍스트 파일로라도 결과를 남김
+# Optional: CLI test
 # -----------------------------
-def generate_placeholder_image(out_path: Path, text: str, size: Tuple[int, int]) -> None:
-    try:
-        from PIL import Image, ImageDraw
-
-        img = Image.new("RGB", size, (245, 245, 245))
-        draw = ImageDraw.Draw(img)
-        draw.text((40, 40), "Alloki & Dalloki (placeholder)", fill=(30, 30, 30))
-        draw.text((40, 90), text[:500], fill=(50, 50, 50))
-        img.save(out_path)
-    except Exception:
-        # PIL이 없거나 에러면 txt로라도 저장
-        out_path.with_suffix(".txt").write_text(text, encoding="utf-8")
-
-
-# -----------------------------
-# 버튼이 호출할 "단 하나"의 함수
-# -----------------------------
-def run_all(
-    user_name: str,
-    season: str = "spring",
-    offer_code: str = "D7",
-    out_dir: str = "outputs",
-) -> RunResult:
-    user_name = (user_name or "").strip() or "USER"
-    season = (season or "spring").strip().lower()
-    offer_code = (offer_code or "D7").strip().upper()
-
-    # 1) 폴더 준비
-    out = Path(out_dir)
-    out.mkdir(parents=True, exist_ok=True)
-
-    try:
-        # 2) 시즌팩/플랜 분기
-        days, bonus, plan_label = offer_plan(offer_code=offer_code, season=season)
-
-        # 3) 문구 생성
-        copy = thumb_copy_for_offer(offer_code=offer_code, season=season)
-
-        # 4) 이미지 생성(샘플)
-        prompt = build_prompt(user_name=user_name, season=season, plan_label=plan_label)
-
-        stamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        img_path = out / f"{user_name}_{season}_{offer_code}_{stamp}.png"
-
-        # 스토리형 세로 이미지로 샘플 생성
-        generate_placeholder_image(out_path=img_path, text=prompt, size=OUT_STORY)
-
-        return RunResult(
-            ok=True,
-            msg=f"성공! (플랜={plan_label}, days={days}, bonus={bonus})",
-            user_name=user_name,
-            season=season,
-            offer_code=offer_code,
-            plan_label=plan_label,
-            copy=copy,
-            image_path=str(img_path) if img_path.exists() else None,
-            created_at=stamp,
-        )
-
-    except Exception as e:
-        return RunResult(
-            ok=False,
-            msg=f"오류: {e}",
-            user_name=user_name,
-            season=season,
-            offer_code=offer_code,
-            plan_label="unknown",
-            copy={},
-            image_path=None,
-            created_at=datetime.datetime.now().strftime("%Y%m%d_%H%M%S"),
-        )
+if __name__ == "__main__":
+    # 로컬에서 테스트할 때:
+    # export OPENAI_API_KEY="..."
+    res = run_generate(
+        offer_code="SEASONPACK",
+        season="spring",
+        mood="calm",
+        out_name="test_v60.png",
+        size=SIZE_SQUARE,
+    )
+    print("OK:", res.image_path)
+    print("PROMPT:", res.prompt)
+    print("COPY:", res.copy)
