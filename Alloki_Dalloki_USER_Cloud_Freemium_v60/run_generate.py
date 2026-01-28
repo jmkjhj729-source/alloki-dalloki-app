@@ -28,17 +28,21 @@ BASE_PROMPT = (
     "ivory tone, clean composition, emotional but quiet mood, storybook style, high resolution. "
     "Leave generous empty space for text overlay. "
     "No text, no letters, no watermark."
+)
+
 SEASON_ADDONS = {
     "spring": "Soft peach and cream background, spring light.",
     "summer": "Soft mint and ivory background, cool calm mood.",
     "autumn": "Oatmeal and warm brown background, reflective mood.",
     "winter": "Ivory and light gray-blue background, soft winter light.",
     "yearend_bundle": "Four-season subtle gradient ring, premium calm feeling.",
-}THUMB_COPY_DEFAULT = {
+}
+THUMB_COPY_DEFAULT = {
     "A": "오늘의 마음을 꺼내보세요",
     "B": "지금 안 보면 놓쳐요",
     "C": "사계절을 건너온 마음",
-}def offer_plan(offer_code: str, season: str, days_arg: int, bonus_arg: int) -> Tuple[int,int,str]:
+}
+def offer_plan(offer_code: str, season: str, days_arg: int, bonus_arg: int) -> Tuple[int,int,str]:
     """
     Returns (days, bonus, label)
     - D7/D14/D21 -> days fixed, bonus=0
