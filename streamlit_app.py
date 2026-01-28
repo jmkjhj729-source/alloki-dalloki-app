@@ -6,3 +6,5 @@ st.title("🐼 알록이 & 달록이 앱")
 st.write("Streamlit 배포 성공 🎉")
 
 st.info("이제 여기에 UI를 하나씩 붙이면 됩니다.")
+if st.button("🐼 알록이 시작하기"):
+    st.success("버튼이 눌렸어요! 🎉")
