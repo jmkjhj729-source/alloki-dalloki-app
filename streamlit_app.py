@@ -18,8 +18,10 @@ if st.button("🐼 알록이 시작하기"):
     cmd = [
     sys.executable,
     str(V60_APP),
-    "run_week"
+    "run_week",
+    "--season", "spring"
 ]
+
 
     result = subprocess.run(
         cmd,
