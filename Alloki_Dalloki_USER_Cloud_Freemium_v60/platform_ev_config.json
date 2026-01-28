@@ -1,0 +1,75 @@
+{
+  "default": {
+    "metric": "conv_rate",
+    "refund_rate": 0.03,
+    "coupon_cost": 200,
+    "bonus_cost": 150,
+    "ltv_weight": 1.0,
+    "seasonpack_bonus_cost_mult": 1.8,
+    "segment_ltv_mult": {
+      "new": 1.0,
+      "repeat": 1.25
+    },
+    "by_season": {
+      "yearend": {
+        "coupon_cost": 350,
+        "refund_rate": 0.035
+      },
+      "promo_d-7": {
+        "coupon_cost": 260
+      },
+      "promo_d-3": {
+        "coupon_cost": 320,
+        "refund_rate": 0.04
+      },
+      "promo_d-1": {
+        "coupon_cost": 380
+      }
+    },
+    "ltv_model": {
+      "alpha_repurchase_rev_ratio": 0.8,
+      "beta_coupon_discount": 0.5,
+      "gamma_seasonpack_uplift": 0.15
+    }
+  },
+  "instagram": {
+    "metric": "click_cvr",
+    "refund_rate": 0.02,
+    "coupon_cost": 120,
+    "bonus_cost": 120,
+    "ltv_weight": 1.15
+  },
+  "tiktok": {
+    "metric": "click_cvr",
+    "refund_rate": 0.02,
+    "coupon_cost": 150,
+    "bonus_cost": 130,
+    "ltv_weight": 1.1
+  },
+  "smartstore": {
+    "metric": "purchase_cvr",
+    "refund_rate": 0.04,
+    "coupon_cost": 300,
+    "bonus_cost": 180,
+    "ltv_weight": 1.0,
+    "by_season": {
+      "yearend": {
+        "coupon_cost": 450
+      }
+    }
+  },
+  "cafe24": {
+    "metric": "purchase_cvr",
+    "refund_rate": 0.04,
+    "coupon_cost": 250,
+    "bonus_cost": 180,
+    "ltv_weight": 1.0
+  },
+  "toss": {
+    "metric": "purchase_cvr",
+    "refund_rate": 0.04,
+    "coupon_cost": 280,
+    "bonus_cost": 180,
+    "ltv_weight": 1.0
+  }
+}
