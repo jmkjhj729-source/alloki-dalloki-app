@@ -65,14 +65,14 @@ def offer_plan(offer_code: str, season: str, days_arg: int, bonus_arg: int) -> T
 def thumb_copy_for_offer(offer_code: str, season: str) -> Dict[str, str]:
     oc = (offer_code or "").upper()
 
-      if oc == "SEASONPACK":
-        # A=공감형, B=긴급형, C=프리미엄형 느낌 유지
+    if oc == "SEASONPACK":
         season_kr = {
             "spring": "봄",
             "summer": "여름",
             "autumn": "가을",
             "winter": "겨울",
         }.get(season, season)
+
 
         return {
             "A": f"{season_kr} 시즌팩 21+3 오늘의 마음을 꺼내요",
