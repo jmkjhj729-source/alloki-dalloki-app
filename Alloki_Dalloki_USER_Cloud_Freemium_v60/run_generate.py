@@ -8,49 +8,37 @@ Alloki & Dalloki Generator (v31)
 ✅ --story_preset / --story_last_preset 유지 (v4 기능 포함)
 ✅ Cards 엑셀: day,text,color,mood,price,cta 읽어서 반영
 """
-
 from __future__ import annotations
 import argparse, os, sys, zipfile
 from dataclasses import dataclass
 from datetime import date, datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
-
 import requests
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
 import qrcode
 import openpyxl
-
-api_key = os.environ.get("OPENAI_API_KEY","").strip()
-
 OUT_SQUARE = (1080, 1080)
 OUT_STORY  = (1080, 1920)
 API_SIZE   = "1024x1024"
 MODEL      = "gpt-image-1"
-
-
 BASE_PROMPT = (
     "Two adorable pastel rainbow baby poodles, Alloki and Dalloki, "
     "sitting calmly side by side, gentle expressions, minimal background, "
     "ivory tone, clean composition, emotional but quiet mood, storybook style, high resolution. "
     "Leave generous empty space for text overlay. "
     "No text, no letters, no watermark."
-)
-SEASON_ADDONS = {
+)SEASON_ADDONS = {
     "spring": "Soft peach and cream background, spring light.",
     "summer": "Soft mint and ivory background, cool calm mood.",
     "autumn": "Oatmeal and warm brown background, reflective mood.",
     "winter": "Ivory and light gray-blue background, soft winter light.",
     "yearend_bundle": "Four-season subtle gradient ring, premium calm feeling.",
-}
-THUMB_COPY_DEFAULT = {
+}THUMB_COPY_DEFAULT = {
     "A": "오늘의 마음을 꺼내보세요",
     "B": "지금 안 보면 놓쳐요",
     "C": "사계절을 건너온 마음",
-}
-
-
-def offer_plan(offer_code: str, season: str, days_arg: int, bonus_arg: int) -> Tuple[int,int,str]:
+}def offer_plan(offer_code: str, season: str, days_arg: int, bonus_arg: int) -> Tuple[int,int,str]:
     """
     Returns (days, bonus, label)
     - D7/D14/D21 -> days fixed, bonus=0
@@ -64,39 +52,27 @@ def offer_plan(offer_code: str, season: str, days_arg: int, bonus_arg: int) -> T
         b = bonus_arg if bonus_arg else 3
         return 21, b, f"{season} 시즌팩"
     return days_arg, bonus_arg, "custom"
-
-def thumb_copy_for_offer(offer_code: str, season: str) -> Dict[str, str]:
+def thumb_copy_for_offer(offer_code: str, season: str) -> Dict[str,str]:
     oc = (offer_code or "").upper()
-
     if oc == "SEASONPACK":
-        season_kr = {
-            "spring": "봄",
-            "summer": "여름",
-            "autumn": "가을",
-            "winter": "겨울",
-        }.get(season, season)
-
-
+        # A=공감형, B=긴급형, C=프리미엄형 느낌 유지
+        season_kr = {"spring":"봄","summer":"여름","autumn":"가을","winter":"겨울"}.get(season, season)
         return {
-            "A": f"{season_kr} 시즌팩 21+3 오늘의 마음을 꺼내요",
-            "B": f"{season_kr} 시즌팩 21+3 지금 안 사면 늦겠어요",
-            "C": f"{season_kr} 시즌팩 21+3 프리미엄 한정",
+            "A": f"{season_kr} 시즌팩 21+3
+오늘의 마음을 꺼내요",
+            "B": f"{season_kr} 시즌팩 21+3
+지금 안 사면 놓쳐요",
+            "C": f"{season_kr} 시즌팩 21+3
+프리미엄 한정",
         }
-
     if oc == "D7":
-        return {"A": "7일 카드 · 오늘의 마음", "B": "7일 카드 · 지금 시작", "C": "7일 카드 · 가볍게"}
-
+        return {"A":"7일 카드 · 오늘의 마음", "B":"7일 카드 · 지금 시작", "C":"7일 카드 · 가볍게 힐링"}
     if oc == "D14":
-        return {"A": "14일 카드 · 마음 회복", "B": "14일 카드 · 놓치면 후회", "C": "14일 카드 · 프리미엄"}
-
+        return {"A":"14일 카드 · 마음 회복", "B":"14일 카드 · 놓치면 후회", "C":"14일 카드 · 프리미엄"}
     if oc == "D21":
-        return {"A": "21일 카드 · 마음 루틴", "B": "21일 카드 · 지금이 타이밍", "C": "21일 카드 · 프리미엄"}
-
+        return {"A":"21일 카드 · 마음 루틴", "B":"21일 카드 · 지금이 타이밍", "C":"21일 카드 · 프리미엄"}
     return THUMB_COPY_DEFAULT.copy()
-
-
 def ensure_dir(p: Path): p.mkdir(parents=True, exist_ok=True)
-
 def compute_countdown(deadline: str, fallback_days: int) -> int:
     """
     deadline: YYYY-MM-DD
@@ -111,7 +87,6 @@ def compute_countdown(deadline: str, fallback_days: int) -> int:
         return max(0, int(delta))
     except Exception:
         return int(fallback_days)
-
 def seasonpack_stage_labels(days_left: int) -> tuple[str,str]:
     """
     returns (urgency_tag, headline_suffix)
@@ -125,7 +100,6 @@ def seasonpack_stage_labels(days_left: int) -> tuple[str,str]:
     if days_left <= 7:
         return "D-7", "이번 주 마감"
     return f"D-{days_left}", ""
-
 def seasonpack_cta_body_by_stage(days_left: int, segment: str) -> str:
     seg = (segment or "new").lower()
     if days_left <= 0:
@@ -137,7 +111,6 @@ def seasonpack_cta_body_by_stage(days_left: int, segment: str) -> str:
     if days_left <= 7:
         return "이번 주 마감!\n3주 루틴 + 보너스 3장"
     return "3주 루틴 완성!\n보너스 3장까지 바로 받기"
-
 def seasonpack_cta_t1_teaser_by_stage(days_left: int, platform: str, segment: str) -> str:
     seg = (segment or "new").lower()
     if days_left <= 0:
@@ -150,7 +123,6 @@ def seasonpack_cta_t1_teaser_by_stage(days_left: int, platform: str, segment: st
         return "이번 주 마감\n21일 + 보너스 3장 공개"
     # default
     return cta_t1_teaser_copy(platform, "", segment)
-
 def add_countdown_label(im_path, out_path, days_left: int = 3):
     """Overlay D-N countdown near top-left."""
     from PIL import Image, ImageDraw, ImageFont
@@ -169,7 +141,6 @@ def add_countdown_label(im_path, out_path, days_left: int = 3):
     draw.rounded_rectangle([x0-pad, y0-pad, x0+tw+pad, y0+th+pad], radius=int(pad*1.2), fill=(0,0,0,170))
     draw.text((x0,y0), label, fill=(255,255,255,255), font=font)
     im.save(out_path, "PNG")
-
 def cta_t1_teaser_copy(platform: str, season: str, segment: str) -> str:
     """Return teaser body for CTA_T1. Segment-based split."""
     seg = (segment or "new").lower()
@@ -179,7 +150,6 @@ def cta_t1_teaser_copy(platform: str, season: str, segment: str) -> str:
     if (platform or "").lower() == "tiktok":
         return "처음이면 지금이 기회!\n21일 + 보너스 3장 공개"
     return "처음이라면 가볍게 시작!\n21일 + 보너스 3장 공개"
-
 def make_cta_t1_mp4(
     story_png_path: Path,
     mp4_path: Path,
@@ -203,14 +173,12 @@ def make_cta_t1_mp4(
     n = int(seconds * fps)
     frames = []
     border = 22 if red_border else 0
-
     # graph config
     bins = graph_bins or []
     g_w = int(w*0.34)
     g_h = int(h*0.16)
     g_x = int(w*0.06)
     g_y = int(h*0.74)
-
     for t in range(n):
         z = 1.0 + 0.06 * (t / max(1, n-1))
         zw, zh = int(w*z), int(h*z)
@@ -218,7 +186,6 @@ def make_cta_t1_mp4(
         left = (zw - w)//2
         top = (zh - h)//2
         imc = imz.crop((left, top, left+w, top+h)).copy()
-
         if shake:
             amp = max(2, int(shake_intensity))
             dx = int(((-1)**t) * (amp + (t % 4)))
@@ -226,23 +193,19 @@ def make_cta_t1_mp4(
             tmp = Image.new("RGB",(w,h),(0,0,0))
             tmp.paste(imc, (dx,dy))
             imc = tmp
-
         draw = ImageDraw.Draw(imc)
-
         # sparkle dots
         for k in range(14):
             x = int((w*(k+1)/15) + (t*9 + k*31) % 27 - 13)
             y = int((h*(k+1)/15) + (t*13 + k*17) % 31 - 15)
             r = 2 + ((t + k) % 3)
             draw.ellipse([x-r,y-r,x+r,y+r], fill=(255,255,255))
-
         # warning banner
         if banner_text:
             banner_h = int(h*0.12)
             draw.rectangle([0,0,w,banner_h], fill=banner_color)
             f = pick_font(DEFAULT_FONT, int(banner_h*0.45))
             draw.text((int(w*0.05), int(banner_h*0.25)), banner_text, font=f, fill=(255,255,255))
-
         # mini purchase graph (simple polyline)
         if bins:
             draw.rounded_rectangle([g_x-10, g_y-10, g_x+g_w+10, g_y+g_h+10], radius=18, fill=(0,0,0,140))
@@ -257,21 +220,16 @@ def make_cta_t1_mp4(
             # label
             f2 = pick_font(DEFAULT_FONT, int(h*0.03))
             draw.text((g_x, g_y-34), "실시간 구매 그래프", font=f2, fill=(255,255,255))
-
         # border
         if red_border:
             draw.rectangle([0,0,w-1,h-1], outline=(255,0,0), width=max(10,border))
-
         frames.append(np.array(imc))
-
     mp4_path.parent.mkdir(parents=True, exist_ok=True)
     iio.imwrite(mp4_path, frames, fps=fps, codec="libx264", pixelformat="yuv420p")
-
 def pick_font(path: Optional[str], size: int):
     if path and Path(path).exists():
         return ImageFont.truetype(path, size=size)
     return ImageFont.load_default()
-
 def header_index(ws):
     hdr = [c.value for c in ws[1]]
     idx = {}
@@ -279,14 +237,12 @@ def header_index(ws):
         if v is None: continue
         idx[str(v).strip().lower()] = i
     return idx
-
 def normalize_day(val) -> str:
     s = str(val).strip().upper()
     if s.startswith("DAY"):
         s = s[3:]
     s = "".join(ch for ch in s if ch.isdigit())
     return f"DAY{int(s):02d}" if s else ""
-
 def load_cards_xlsx(path: Path, sheet: str) -> Dict[str, dict]:
     wb = openpyxl.load_workbook(path)
     ws = wb[sheet] if sheet in wb.sheetnames else wb.active
@@ -310,7 +266,6 @@ def load_cards_xlsx(path: Path, sheet: str) -> Dict[str, dict]:
             "cta": get(row, "cta"),
         }
     return out
-
 def load_thumb_copy_xlsx(path: Path, sheet: str) -> Dict[str,str]:
     try:
         wb = openpyxl.load_workbook(path)
@@ -331,7 +286,6 @@ def load_thumb_copy_xlsx(path: Path, sheet: str) -> Dict[str,str]:
         if v in ["A","B","C"]:
             out[v] = str(c).strip()
     return out
-
 def openai_img(prompt: str, out_path: Path, api_key: str, model: str, size: str):
     url = "https://api.openai.com/v1/images/generations"
     r = requests.post(url, headers={"Authorization": f"Bearer {api_key}"},
@@ -347,7 +301,6 @@ def openai_img(prompt: str, out_path: Path, api_key: str, model: str, size: str)
         out_path.write_bytes(requests.get(item["url"], timeout=180).content)
     else:
         raise RuntimeError("Unexpected response format")
-
 def build_prompt(season: str, kind: str, variant: str="A", mood: str="", color: str="", price: str="", offer_code: str="") -> str:
     addon = SEASON_ADDONS.get(season,"")
     oc = (offer_code or "").upper()
@@ -364,7 +317,6 @@ def build_prompt(season: str, kind: str, variant: str="A", mood: str="", color: 
     mood = (mood or "").strip()
     color = (color or "").strip()
     price_s = (price or "").strip()
-
     mood_map = {
         "힐링": "healing, calm, soft, cozy",
         "공감": "empathetic, warm, comforting",
@@ -375,13 +327,11 @@ def build_prompt(season: str, kind: str, variant: str="A", mood: str="", color: 
         "다음주": "reset, fresh start, hopeful",
     }
     mood_extra = mood_map.get(mood, mood.lower()) if mood else ""
-
     # Color palette hint (keeps image cohesive)
     if color:
         color_hint = f"Color palette accent: {color} pastel, harmonized with ivory background."
     else:
         color_hint = ""
-
     # Price tier hint → more premium composition when higher price
     premium_hint = ""
     light_hint = ""
@@ -406,7 +356,6 @@ def build_prompt(season: str, kind: str, variant: str="A", mood: str="", color: 
     if kind == "cta_last":
         return f"{BASE_PROMPT} {addon} Conversion-focused clean layout, extra empty space. {offer_hint} {mood_extra} {color_hint} {premium_hint} {light_hint}"
     return f"{BASE_PROMPT} {addon} Card layout, extra empty space. {offer_hint} {mood_extra} {color_hint} {premium_hint} {light_hint}"
-
 def wrap_lines(draw, text, font, max_w):
     text = (text or "").strip()
     if not text: return []
@@ -432,7 +381,6 @@ def wrap_lines(draw, text, font, max_w):
             cur = ch
     if cur: lines.append(cur)
     return lines
-
 def render_square_card(base_path: Path, out_path: Path, title: str, body: str, mood: str, color: str, font_path: Optional[str]):
     im = Image.open(base_path).convert("RGBA").resize(OUT_SQUARE, Image.LANCZOS)
     draw = ImageDraw.Draw(im)
@@ -440,12 +388,10 @@ def render_square_card(base_path: Path, out_path: Path, title: str, body: str, m
     f_title = pick_font(font_path, 48)
     f_meta  = pick_font(font_path, 28)
     f_body  = pick_font(font_path, 32)
-
     draw.text((80,110), title, font=f_title, fill=c)
     meta = " · ".join([x for x in [mood, color] if x])
     if meta:
         draw.text((80,170), meta, font=f_meta, fill=c)
-
     x, y, max_w = 80, 720, 920
     for para in (body or "").split("\n"):
         para = para.strip()
@@ -455,10 +401,8 @@ def render_square_card(base_path: Path, out_path: Path, title: str, body: str, m
         for ln in wrap_lines(draw, para, f_body, max_w):
             draw.text((x,y), ln, font=f_body, fill=c)
             y += f_body.size + 10
-
     out_path.parent.mkdir(parents=True, exist_ok=True)
     im.convert("RGB").save(out_path, "PNG")
-
 def _load_json(path: str) -> dict:
     p = Path(path)
     if p.exists():
@@ -467,10 +411,8 @@ def _load_json(path: str) -> dict:
         except Exception:
             return {}
     return {}
-
 def _save_json(path: str, obj: dict):
     Path(path).write_text(json.dumps(obj, ensure_ascii=False, indent=2), encoding="utf-8")
-
 def issue_coupon_local(state_file: str, tier: str, length: int = 8) -> str:
     """
     Local random coupon issuance (offline-safe). Stores issued coupons in state_file.
@@ -482,7 +424,6 @@ def issue_coupon_local(state_file: str, tier: str, length: int = 8) -> str:
     st["issued"][code] = {"tier": tier, "issued_at": datetime.utcnow().isoformat(), "used": False}
     _save_json(state_file, st)
     return code
-
 def mark_coupon_used_local(state_file: str, code: str, meta: dict | None = None):
     st = _load_json(state_file)
     if "issued" in st and code in st["issued"]:
@@ -491,7 +432,6 @@ def mark_coupon_used_local(state_file: str, code: str, meta: dict | None = None)
         if meta:
             st["issued"][code]["meta"] = meta
         _save_json(state_file, st)
-
 def make_bonus_card(out_dir: Path, bonus_key: str, theme: str, font_path: str | None, preset_story: str, qr_url: str = "") -> dict:
     """
     Create square + 9:16 bonus card. Returns paths.
@@ -514,7 +454,6 @@ def make_bonus_card(out_dir: Path, bonus_key: str, theme: str, font_path: str | 
     st_path = out_dir/f"{bonus_key.replace(' ','_')}_9x16.png"
     st.save(st_path, "PNG")
     return {"square": str(sq), "story": str(st_path)}
-
 def write_message_payload(out_dir: Path, filename: str, platform: str, tier: str, coupon_code: str, bonus_link: str, bonus_story_link: str, segment: str):
     """
 # optional: send via API (Kakao AlimTalk / SMS / IG DM)
@@ -542,8 +481,7 @@ landing_files = write_landing_html_variants(
     coupon_code=coupon_code,
     variants=args.landing_variants,
     track_url=args.landing_track_url,
-)
-profile_link_url = ""
+)profile_link_url = ""
 profile_link_map = {}
 if args.upload_landing:
     try:
@@ -596,7 +534,6 @@ except Exception:
     pass
 except Exception:
     pass
-
     Writes a JSON with message templates (for DM/알림톡/문자/메일 등 외부 발송 시스템에 그대로 전달).
     """
     # platform-specific wording
@@ -617,7 +554,6 @@ except Exception:
         "message_ko": f"{hook}\n보너스 카드: {bonus_link}\n스토리용: {bonus_story_link}\n쿠폰코드: {coupon_code}",
     }
     (out_dir/filename).write_text(json.dumps(obj, ensure_ascii=False, indent=2), encoding="utf-8")
-
 def compute_time_left(deadline_date: str, deadline_time: str) -> tuple[int, float, float, bool]:
     """
     Returns (raw_days, hours_left, minutes_left, expired)
@@ -634,7 +570,6 @@ def compute_time_left(deadline_date: str, deadline_time: str) -> tuple[int, floa
         return raw_days, max(0.0, hours), max(0.0, minutes), (delta < 0)
     except Exception:
         return 999, 999.0, 999.0, False
-
 def urgency_stage(minutes_left: float, hours_left: float, use_urgency: bool, use_shock10: bool) -> str:
     if use_shock10 and minutes_left > 0 and minutes_left <= 1:
         return "M1"
@@ -646,7 +581,6 @@ def urgency_stage(minutes_left: float, hours_left: float, use_urgency: bool, use
     if hours_left <= 3: return "H3"
     if hours_left <= 6: return "H6"
     return "NORMAL"
-
 def read_webhook_state_ext(state_file: str):
     try:
         p = Path(state_file)
@@ -655,7 +589,6 @@ def read_webhook_state_ext(state_file: str):
         return json.loads(p.read_text(encoding="utf-8"))
     except Exception:
         return {}
-
 def read_webhook_counter(state_file: str) -> int:
     try:
         p = Path(state_file)
@@ -667,12 +600,10 @@ def read_webhook_counter(state_file: str) -> int:
         return int(v)
     except Exception:
         return -1
-
 def buying_now_counter() -> int:
     import time
     # pseudo-live counter (no server required)
     return 12 + int(time.time()) % 37
-
 def decide_bonus_coupon(state: dict) -> dict:
     """
     Returns dict with keys:
@@ -689,7 +620,6 @@ def decide_bonus_coupon(state: dict) -> dict:
         high_recent = bool(state.get("high_amount_recent", False))
     except Exception:
         last_amt, s30, high_recent = 0, 0, False
-
     # VIP: very high single purchase or strong 30min revenue OR high recent flag
     if high_recent or last_amt >= 150000 or s30 >= 500000:
         return {
@@ -716,7 +646,6 @@ def decide_bonus_coupon(state: dict) -> dict:
         "benefit_line": "🎁 지금 구매 · BONUS DAY09 + 쿠폰 SAVE5",
         "theme": "normal",
     }
-
 def decide_dynamic_offer(state: dict, base_price_text: str) -> tuple[str,str]:
     """
     Returns (price_text, benefit_line).
@@ -730,7 +659,6 @@ def decide_dynamic_offer(state: dict, base_price_text: str) -> tuple[str,str]:
         last_amt = int(state.get("last_amount", 0))
     except Exception:
         return base_price_text, ""
-
     # Tier logic:
     # - If last order is high or last 30min sum high => premium framing
     if last_amt >= 100000 or s30 >= 300000:
@@ -740,11 +668,9 @@ def decide_dynamic_offer(state: dict, base_price_text: str) -> tuple[str,str]:
         return base_price_text, "지금 구매 러시 · 보너스 혜택 진행중"
     # - Default
     return base_price_text, ""
-
 def price_scale_from_counter(n: int) -> float:
     # 1.00 ~ 1.70
     return min(1.70, 1.00 + max(0, n-10) / 80.0)
-
 def add_ribbon_badge(im_path: Path, out_path: Path, text: str, theme: str="normal"):
     """
     Add a commerce-style ribbon/badge at top-right.
@@ -765,7 +691,6 @@ def add_ribbon_badge(im_path: Path, out_path: Path, text: str, theme: str="norma
     draw.text((x1+24, y1+int(bh*0.22)), text, font=f, fill=fg)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     im.save(out_path, "PNG")
-
 def add_teaser_qr(im_path: Path, out_path: Path, url: str, label: str = "알림 신청"):
     im = Image.open(im_path).convert("RGBA")
     draw = ImageDraw.Draw(im)
@@ -781,27 +706,22 @@ def add_teaser_qr(im_path: Path, out_path: Path, url: str, label: str = "알림 
         draw.text((xy[0]+70, xy[1]-55), label, font=f, fill=(255,255,255,255))
     out_path.parent.mkdir(parents=True, exist_ok=True)
     im.convert("RGB").save(out_path, "PNG")
-
 def add_qr_price_cta_square(square_path: Path, out_path: Path, qr_url: str, price_text: str, cta_text: str, font_path: Optional[str], price_scale: float=1.0):
     im = Image.open(square_path).convert("RGBA")
     draw = ImageDraw.Draw(im)
-
     qr = qrcode.QRCode(box_size=6, border=2)
     qr.add_data(qr_url)
     qr.make(fit=True)
     qr_img = qr.make_image(fill_color="black", back_color="white").convert("RGB").resize((240,240), Image.NEAREST)
     qr_xy = (720, 700)
     im.paste(qr_img, qr_xy)
-
     f = pick_font(font_path, max(18, int(28*price_scale)))
     c = (50,44,40,255)
     tx, ty = qr_xy[0]-380, qr_xy[1]+30
     if price_text: draw.text((tx,ty), price_text, font=f, fill=c)
     if cta_text:   draw.text((tx,ty+44), cta_text, font=f, fill=c)
-
     out_path.parent.mkdir(parents=True, exist_ok=True)
     im.convert("RGB").save(out_path, "PNG")
-
 def square_to_story(square_rgb: Image.Image, preset: str) -> Image.Image:
     fg = square_rgb.resize((1080,1080), Image.LANCZOS)
     bg = fg.resize(OUT_STORY, Image.LANCZOS).filter(ImageFilter.GaussianBlur(18))
@@ -814,7 +734,6 @@ def square_to_story(square_rgb: Image.Image, preset: str) -> Image.Image:
         y = (OUT_STORY[1] - 1080) // 2
     canvas.paste(fg, (0,y))
     return canvas
-
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--season", choices=list(SEASON_ADDONS.keys()), required=True)
@@ -869,42 +788,33 @@ def main():
     ap.add_argument("--next_season", type=str, default=os.environ.get("NEXT_SEASON",""), help="If expired, switch SEASONPACK to this season (spring/summer/autumn/winter)")
     ap.add_argument("--next_deadline", type=str, default=os.environ.get("NEXT_DEADLINE",""), help="YYYY-MM-DD for next season; used when switching")
     ap.add_argument("--cta_t1_video", action="store_true", help="generate 2s mp4 for seasonpack CTA_T1")
-
     ap.add_argument("--xlsx", required=True)
     ap.add_argument("--sheet", default="Cards")
     ap.add_argument("--thumb_sheet", default="ThumbCopy")
-
     ap.add_argument("--thumb_pick", choices=["A","B","C","ALL"], default="ALL",
                    help="A/B/C 중 1종만 생성 또는 ALL(기본)")
-
     ap.add_argument("--export_story", action="store_true")
     ap.add_argument("--story_preset", choices=["top","middle","bottom"], default="middle")
     ap.add_argument("--story_last_preset", choices=["top","middle","bottom"], default="bottom")
     ap.add_argument("--story_last_preset_seasonpack", choices=["top","middle","bottom"], default="middle")
-
     ap.add_argument("--base_url", default="https://example.com/buy")
     ap.add_argument("--utm_campaign", default="winter_teaser")
     ap.add_argument("--font_path", default="")
     ap.add_argument("--out_dir", default="outputs")
     args = ap.parse_args()
-
 raw_days_t, h_left, m_left, expired_time = compute_time_left(args.deadline, args.deadline_time)
 # keep day-based expired from existing logic too; expired_time is more precise
-
     api_key = os.environ.get("OPENAI_API_KEY","").strip()
     if not api_key:
         print("ERROR: Please set OPENAI_API_KEY", file=sys.stderr)
         sys.exit(1)
-
+    
 # compute countdown (D-N)
 cd, raw_delta, expired = compute_deadline_info(args.deadline, args.countdown_days)
 cards = load_cards_xlsx(Path(args.xlsx), args.sheet)
-
     # offer plan
     days, bonus_n, offer_label = offer_plan(args.offer_code, args.season, args.days, args.bonus)
-
 # auto hide / switch seasonpack if expired
-
 if args.offer_code.upper() == "SEASONPACK" and expired:
     # After deadline: optionally generate next-season teaser immediately (no CTA)
     if args.auto_teaser and args.next_season:
@@ -920,7 +830,6 @@ if args.offer_code.upper() == "SEASONPACK" and expired:
         st = square_to_story(Image.open(teaser_sq).convert("RGB"), args.story_last_preset_seasonpack)
         st.save(teaser_st, "PNG")
         return
-
     if args.next_season:
         args.season = args.next_season
         if args.next_deadline:
@@ -931,18 +840,14 @@ if args.offer_code.upper() == "SEASONPACK" and expired:
         # hide season pack: downgrade to D21 (no bonus)
         args.offer_code = "D21"
         days, bonus_n, offer_label = offer_plan(args.offer_code, args.season, args.days, args.bonus)
-
     thumb_copy = thumb_copy_for_offer(args.offer_code, args.season)
     # allow spreadsheet override (optional)
     thumb_copy.update(load_thumb_copy_xlsx(Path(args.xlsx), args.thumb_sheet))
-
     out_root = Path(args.out_dir)/f"{date.today().isoformat()}_{args.season}_{args.platform}_{args.mode}_{args.offer_code}"
     ensure_dir(out_root)
     base_dir = out_root/"base_art"
     ensure_dir(base_dir)
-
     font_path = args.font_path if args.font_path else None
-
     # Thumbnails (pick)
     variants = ["A","B","C"] if args.thumb_pick=="ALL" else [args.thumb_pick]
     for v in variants:
@@ -991,30 +896,24 @@ url_map = upload_bonus_assets(
     presign_seconds=args.s3_presign_seconds,
     folder_id=args.gdrive_folder_id,
     sa_json_path=args.gdrive_service_account_json,
-)
-bonus_link = url_map.get(Path(bonus_assets["square"]).name, bonus_assets["square"])
+)bonus_link = url_map.get(Path(bonus_assets["square"]).name, bonus_assets["square"])
         write_message_payload(Path(args.out_dir), args.message_out, args.platform, tier, coupon_code, bonus_link, url_map.get(Path(bonus_assets['story']).name, bonus_assets['story']) if 'bonus_assets' in locals() else '', args.segment)
 except Exception:
     pass
-
-          square_to_story(sq, args.story_preset).save(out_root/f"THUMBNAIL_{v}_9x16.png","PNG")
-
+            square_to_story(sq, args.story_preset).save(out_root/f"THUMBNAIL_{v}_9x16.png","PNG")
     # Day cards
     from urllib.parse import urlencode
     cards_dir = out_root/args.season.upper()
     ensure_dir(cards_dir)
     last_day = f"DAY{days:02d}"
-
     for i in range(1, days+1):
         day = f"DAY{i:02d}"
         info = cards.get(day, {"text":"","color":"","mood":"","price":"","cta":""})
         suffix = f"_{info.get('color','')}" if info.get("color","") else ""
         base = base_dir/f"{day}_BASE.png"
         openai_img(build_prompt(args.season,"card", "A", info.get("mood",""), info.get("color",""), info.get("price",""), offer_code=args.offer_code), base, api_key, MODEL, API_SIZE)
-
         square_path = cards_dir/f"{day}{suffix}.png"
         render_square_card(base, square_path, day, info.get("text",""), info.get("mood",""), info.get("color",""), font_path)
-
         utm = urlencode({
             "utm_source": args.platform,
             "utm_medium": "social",
@@ -1022,7 +921,6 @@ except Exception:
             "utm_content": f"{args.mode}_{day.lower()}",
         })
         qr_url = f"{args.base_url}?{utm}"
-
         square_to_export = square_path
         if args.mode=="free" and i!=1:
             locked = cards_dir/f"{day}{suffix}_LOCK.png"
@@ -1030,7 +928,6 @@ except Exception:
             cta = info.get("cta","") or ("즉시 다운로드" if args.platform=="instagram" else "지금 안 사면 놓쳐요")
             add_qr_price_cta_square(square_path, locked, qr_url, price, cta, font_path)
             square_to_export = locked
-
         if args.export_story:
             # write bonus/coupon decision snapshot
             try:
@@ -1042,12 +939,10 @@ except Exception:
                     )
             except Exception:
                 pass
-
             sq_img = Image.open(square_to_export).convert("RGB")
             preset = args.story_last_preset if day==last_day else args.story_preset
             story = square_to_story(sq_img, preset)
             story.save(cards_dir/square_to_export.name.replace(".png","_9x16.png"), "PNG")
-
             if day==last_day:
                 # Dedicated CTA cut
                 cta_base = base_dir/f"{day}_CTA_BASE.png"
@@ -1059,7 +954,6 @@ except Exception:
 if args.offer_code.upper() == "SEASONPACK":
     title, body, price, cta = seasonpack_cta_copy(args.platform, args.season, cd, args.segment)
             benefit_line = ""
-
 bonus_info = {"tier":"light","bonus":"","coupon":"","benefit_line":"","theme":"normal"}
 if args.dynamic_offer and args.live_counter and args.live_counter_source=='webhook':
     bonus_info = decide_bonus_coupon(state)
@@ -1069,7 +963,6 @@ if args.dynamic_offer and args.live_counter and args.live_counter_source=='webho
                     body = body + "\n" + benefit_line
                 if bonus_info.get('benefit_line'):
                     body = body + "\n" + bonus_info['benefit_line']
-
     # CTA Step 1: Teaser
     cta1_base = cards_dir/f"{day}{suffix}_CTA_T1_BASE.png"
     openai_img(build_prompt(args.season,"cta_last_seasonpack","A", info.get("mood",""), info.get("color",""), info.get("price",""), offer_code=args.offer_code),
@@ -1079,7 +972,6 @@ if args.dynamic_offer and args.live_counter and args.live_counter_source=='webho
     badge1 = "오늘 마감" if cd <= 0 else ("내일 마감" if cd <= 1 else "LIMITED")
             add_commerce_badge(cta1_sq, cta1_sq, badge1, ribbon=True)
     square_to_story(Image.open(cta1_sq).convert("RGB"), args.story_last_preset_seasonpack)                .save(cards_dir/f"{day}{suffix}_CTA_T1_9x16.png","PNG")
-
     # CTA Step 2: Conversion
     cta2_base = cards_dir/f"{day}{suffix}_CTA_T2_BASE.png"
     openai_img(build_prompt(args.season,"cta_last_seasonpack","A", info.get("mood",""), info.get("color",""), info.get("price",""), offer_code=args.offer_code),
@@ -1112,11 +1004,9 @@ add_qr_price_cta_square(cta2_sq, cta2_sq, qr_url, price, cta, font_path, price_s
     badge2 = "마지막 기회" if cd <= 0 else ("곧 마감" if cd <= 3 else "BEST VALUE")
             add_commerce_badge(cta2_sq, cta2_sq, badge2, ribbon=True)
     square_to_story(Image.open(cta2_sq).convert("RGB"), args.story_last_preset_seasonpack)                .save(cards_dir/f"{day}{suffix}_CTA_T2_9x16.png","PNG")
-
             # countdown label on CTA_T2 square + story
             add_countdown_label(cta2_sq, cta2_sq, cd)
             add_countdown_label(cards_dir/f"{day}{suffix}_CTA_T2_9x16.png", cards_dir/f"{day}{suffix}_CTA_T2_9x16.png", cd)
-
 # live counter overlay (<=30min)
 if args.live_counter and m_left <= 30:
     n2 = live_n if live_n is not None else (read_webhook_counter(args.webhook_state_file) if args.live_counter_source=='webhook' else buying_now_counter())
@@ -1131,7 +1021,6 @@ if args.live_counter and m_left <= 30:
     imx.save(cards_dir/f"{day}{suffix}_CTA_T2_9x16.png","PNG")
             if bonus_info.get('coupon'):
                 add_ribbon_badge(cards_dir/f"{day}{suffix}_CTA_T2_9x16.png", cards_dir/f"{day}{suffix}_CTA_T2_9x16.png", f"쿠폰 {bonus_info['coupon']}", theme=bonus_info.get('theme','normal'))
-
             # CTA_T1 mp4 (optional)
             
 if args.cta_t1_video:
@@ -1145,10 +1034,8 @@ if args.cta_t1_video:
         shake=(stage=="M10"),
         red_border=(stage=="M10"),
     )
-
 else:
     pass(cards_dir/f"{day}{suffix}_CTA_9x16.png","PNG")
-
 # Bonus cards (SEASONPACK)
 if args.offer_code.upper() == "SEASONPACK" and bonus_n > 0:
     for j in range(1, bonus_n+1):
@@ -1158,10 +1045,8 @@ if args.offer_code.upper() == "SEASONPACK" and bonus_n > 0:
         base = base_dir/f"{bkey}_BASE.png"
         openai_img(build_prompt(args.season,"card","A", info.get("mood",""), info.get("color",""), info.get("price",""), offer_code=args.offer_code),
                   base, api_key, MODEL, API_SIZE)
-
         square_path = cards_dir/f"{bkey}{suffix}.png"
         render_square_card(base, square_path, bkey, info.get("text",""), info.get("mood",""), info.get("color",""), font_path)
-
         utm = urlencode({
             "utm_source": args.platform,
             "utm_medium": "social",
@@ -1169,7 +1054,6 @@ if args.offer_code.upper() == "SEASONPACK" and bonus_n > 0:
             "utm_content": f"{args.mode}_{bkey.lower()}",
         })
         qr_url = f"{args.base_url}?{utm}"
-
         square_to_export = square_path
         if args.mode=="free":
             locked = cards_dir/f"{bkey}{suffix}_LOCK.png"
@@ -1177,7 +1061,6 @@ if args.offer_code.upper() == "SEASONPACK" and bonus_n > 0:
             cta = info.get("cta","") or ("즉시 다운로드" if args.platform=="instagram" else "지금 안 사면 놓쳐요")
             add_qr_price_cta_square(square_path, locked, qr_url, price, cta, font_path)
             square_to_export = locked
-
         if args.export_story:
             # write bonus/coupon decision snapshot
             try:
@@ -1189,11 +1072,9 @@ if args.offer_code.upper() == "SEASONPACK" and bonus_n > 0:
                     )
             except Exception:
                 pass
-
             sq_img = Image.open(square_to_export).convert("RGB")
             story = square_to_story(sq_img, args.story_preset)
             story.save(cards_dir/square_to_export.name.replace(".png","_9x16.png"), "PNG")
-
     # ZIP
     zip_path = out_root.with_suffix(".zip")
     with zipfile.ZipFile(zip_path,"w",zipfile.ZIP_DEFLATED) as z:
@@ -1201,10 +1082,8 @@ if args.offer_code.upper() == "SEASONPACK" and bonus_n > 0:
             if p.is_file():
                 z.write(p, arcname=str(p.relative_to(out_root)))
     print("DONE:", zip_path)
-
 if __name__ == "__main__":
     main()from send_dispatch import dispatch_send
 from log_to_sheet import append_send_log_xlsx, now_kst_iso
 from funnel_tools import build_comment_reply_payload, build_landing_payload, write_json, write_landing_html, write_landing_html_variants
 from uploaders import upload_bonus_assets, upload_landing_html_s3, upload_landing_variants_s3
-
