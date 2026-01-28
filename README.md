@@ -1,1 +1,1 @@
-# alloki-dalloki-app
+# allok i-dallok i-app
