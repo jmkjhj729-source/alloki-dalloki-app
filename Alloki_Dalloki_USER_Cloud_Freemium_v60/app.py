@@ -16,6 +16,10 @@ Example:
   python app.py run_week --season promo_d-3 --platforms tiktok --segments new -- --shock_10min --urgency_video
 """
 from __future__ import annotations
+import streamlit as st
+
+APP_PASSWORD = st.secrets.get("APP_PASSWORD", "")
+PUBLIC_DEMO = st.secrets.get("PUBLIC_DEMO", False)
 
 import argparse
 import json
