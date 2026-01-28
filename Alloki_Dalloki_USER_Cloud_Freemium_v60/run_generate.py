@@ -21,7 +21,7 @@ from PIL import Image, ImageDraw, ImageFont, ImageFilter
 import qrcode
 import openpyxl
 
-# ✅ 여기! (공백 없이 왼쪽 끝)
+
 api_key = os.environ.get("OPENAI_API_KEY", "").strip()
 
 OUT_SQUARE = (1080, 1080)
