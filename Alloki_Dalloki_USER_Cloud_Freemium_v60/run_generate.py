@@ -23,7 +23,6 @@ import openpyxl
 
 
 api_key = os.environ.get("OPENAI_API_KEY", "").strip()
-
 OUT_SQUARE = (1080, 1080)
 OUT_STORY  = (1080, 1920)
 API_SIZE   = "1024x1024"
