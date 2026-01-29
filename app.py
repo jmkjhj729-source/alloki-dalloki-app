@@ -134,8 +134,14 @@ style_mode = st.selectbox(
 st.session_state["style_mode"] = style_mode
 
 # ✅ 여기서부터 버튼 2개는 무조건 보임(세로)
-if st.button("🐼 알록이 시작하기", use_container_width=True):
-    run_flow("알록이")
+# ✅ 버튼은 columns로 강제 분리 (Streamlit 안정 패턴)
+col1, col2 = st.columns(2)
 
-if st.button("🐼 달록이 시작하기", use_container_width=True):
-    run_flow("달록이")
+with col1:
+    if st.button("🐼 알록이 시작하기", use_container_width=True, key="btn_alloki"):
+        run_flow("알록이")
+
+with col2:
+    if st.button("🐼 달록이 시작하기", use_container_width=True, key="btn_dalloki"):
+        run_flow("달록이")
+
