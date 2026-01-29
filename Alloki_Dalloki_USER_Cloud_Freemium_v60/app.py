@@ -1,43 +1,23 @@
-# app.py
 import streamlit as st
-import run_generate
 
 st.set_page_config(page_title="알록이 & 달록이 앱", page_icon="🐼", layout="centered")
 
-st.title("🐼 알록이 & 달록이 앱")
-st.caption("버튼 클릭 → 문구 생성 / 시즌팩 분기 / 이미지 생성(샘플)")
+st.title("🐼 알록이 & 달록이 앱 (버튼 테스트)")
+st.caption("지금은 '버튼 2개가 화면에 뜨는지'만 확인합니다.")
 
-user_name = st.text_input("이름", value="민경")
-season = st.selectbox("시즌", ["spring", "summer", "autumn", "winter"])
-offer_code = st.selectbox("플랜", ["D7", "D14", "D21", "SEASONPACK"])
+# 화면에 실제로 새 코드가 떠 있는지 확인용 표시
+st.info("✅ DIAG: app.py가 이 코드로 실행 중입니다. (이 글이 보이면 반영 성공)")
 
-st.write("---")
+st.divider()
 
-if st.button("🐼 알록이 시작하기"):
-    with st.spinner("v60 실행중... 잠시만요 🧸"):
-        result = run_generate.run_all(
-            user_name=user_name,
-            season=season,
-            offer_code=offer_code,
-            out_dir="outputs",
-        )
+col1, col2 = st.columns(2)
+with col1:
+    if st.button("🐼 알록이 시작하기", use_container_width=True, key="btn_alloki"):
+        st.success("알록이 버튼 클릭됨 ✅")
 
-    if not result.ok:
-        st.error(result.msg)
-    else:
-        st.success(result.msg)
+with col2:
+    if st.button("🐼 달록이 시작하기", use_container_width=True, key="btn_dalloki"):
+        st.success("달록이 버튼 클릭됨 ✅")
 
-        st.subheader("✅ 시즌팩/플랜 분기 결과")
-        st.write(f"- 시즌: **{result.season}**")
-        st.write(f"- 플랜코드: **{result.offer_code}**")
-        st.write(f"- 라벨: **{result.plan_label}**")
-
-        st.subheader("✅ 문구(A/B/C)")
-        st.write(result.copy)
-
-        st.subheader("✅ 생성된 이미지(샘플)")
-        if result.image_path:
-            st.image(result.image_path, use_container_width=True)
-            st.code(result.image_path)
-        else:
-            st.warning("이미지 파일이 생성되지 않았어요.")
+st.divider()
+st.write("세션 상태:", dict(st.session_state))
