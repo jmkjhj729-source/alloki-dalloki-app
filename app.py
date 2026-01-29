@@ -1,388 +1,215 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-Alloki & Dalloki Unified Suite (All-in-One Entry Point)
+# app.py
+import os
+import base64
+from datetime import datetime
+import requests
+import streamlit as st
 
-This app.py is a stable orchestrator that wraps the existing modules/scripts in this package:
-- run_generate.py : generate cards/thumbs/story + (optional) upload/send/log
-- server_webhook_platforms.py : webhook receiver / live counters (optional background)
-- update_ltv : update platform_ev_config.json with data-driven LTV weights
+# -----------------------------
+# 기본 설정
+# -----------------------------
+st.set_page_config(page_title="알록이 & 달록이 앱", page_icon="🐼", layout="centered")
 
-Key goal: **one program** + **one-click commands** like:
-  python app.py run_week --season spring --platforms instagram,tiktok --segments new,repeat --auto_server
+MODEL = "gpt-image-1"          # 이미지 모델
+IMAGE_SIZE = "1024x1024"       # OpenAI 이미지 생성 size
+TIMEOUT_SEC = 120
 
-Any extra args after `--` are forwarded to run_generate.py so you can keep extending without breaking the entrypoint.
-Example:
-  python app.py run_week --season promo_d-3 --platforms tiktok --segments new -- --shock_10min --urgency_video
-"""
-from __future__ import annotations
+# 알록이/달록이 기본 프롬프트 (원하면 여기 문장만 수정)
+BASE_PROMPT_LINES = [
+    "Two adorable pastel rainbow baby poodles, Alloki and Dalloki.",
+    "Sitting calmly side by side, gentle expressions, minimal background.",
+    "Ivory tone, clean composition, emotional but quiet mood, storybook style, high resolution.",
+    "Leave generous empty space for text overlay.",
+    "No text, no letters, no watermark."
+]
 
-import argparse
-import json
-import subprocess
-import sys
-import time
-from dataclasses import dataclass
-from pathlib import Path
-from typing import List, Dict, Any, Optional, Tuple
+SEASON_ADDONS = {
+    "spring":  "Soft peach and cream background, spring light.",
+    "summer":  "Soft mint and ivory background, cool calm mood.",
+    "autumn":  "Oatmeal and warm brown background, reflective mood.",
+    "winter":  "Ivory and light gray-blue background, soft winter light.",
+    "yearend_bundle": "Four-season subtle gradient ring, premium calm feeling.",
+}
 
-import openpyxl
+THUMB_COPY_DEFAULT = {
+    "A": "오늘의 마음을 꺼내보세요.",
+    "B": "지금 안 보면 놓쳐요.",
+    "C": "사계절을 건너온 마음.",
+}
 
-ROOT = Path(__file__).resolve().parent
+# -----------------------------
+# 유틸: API KEY 읽기
+# -----------------------------
+def get_api_key() -> str:
+    # 1) Streamlit secrets 우선
+    if "OPENAI_API_KEY" in st.secrets:
+        return str(st.secrets["OPENAI_API_KEY"]).strip()
+    # 2) 환경변수
+    return os.environ.get("OPENAI_API_KEY", "").strip()
 
+# -----------------------------
+# 유틸: OpenAI "진짜 이미지 생성" (requests로 직접 호출)
+# -----------------------------
+def openai_generate_image(prompt: str, size: str = IMAGE_SIZE) -> bytes:
+    api_key = get_api_key()
+    if not api_key:
+        raise RuntimeError("OPENAI_API_KEY가 없습니다. Streamlit Secrets 또는 환경변수에 설정하세요.")
 
-def _run(cmd: List[str], cwd: Path | None = None) -> int:
-    p = subprocess.run(cmd, cwd=str(cwd) if cwd else None)
-    return int(p.returncode)
-
-
-def _popen(cmd: List[str], cwd: Path | None = None):
-    return subprocess.Popen(cmd, cwd=str(cwd) if cwd else None, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-
-
-def _today_iso() -> str:
-    import datetime
-    return datetime.date.today().isoformat()
-
-
-def _monday(d):
-    import datetime
-    return d - datetime.timedelta(days=d.weekday())
-
-
-def _date_from_iso(s: str):
-    import datetime
-    return datetime.date.fromisoformat(s)
-
-
-def _ensure_dir(p: Path) -> None:
-    p.mkdir(parents=True, exist_ok=True)
-
-
-# ----------------------------
-# LTV update (data-driven)
-# ----------------------------
-
-def _to_float(x):
-    try:
-        return float(x)
-    except Exception:
-        return None
-
-
-def _clamp(x: float, lo: float, hi: float) -> float:
-    return max(lo, min(hi, x))
-
-
-def _load_ev_config(path: Path) -> dict:
-    if not path.exists():
-        return {"default": {}}
-    try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except Exception:
-        return {"default": {}}
-
-
-def _iter_rows_with_headers(xlsx_path: Path):
-    wb = openpyxl.load_workbook(xlsx_path, data_only=True)
-    for ws in wb.worksheets:
-        header_row = None
-        headers = None
-        for r in range(1, 21):
-            row = [ws.cell(r, c).value for c in range(1, ws.max_column + 1)]
-            lower = [str(x).strip().lower() if x is not None else "" for x in row]
-            if "platform" in lower and ("conv_rate" in lower or "cvr" in lower or "conversion" in lower):
-                header_row = r
-                headers = lower
-                break
-        if header_row is None:
-            continue
-        col = {h: i + 1 for i, h in enumerate(headers) if h}
-        for r in range(header_row + 1, ws.max_row + 1):
-            if all(ws.cell(r, c).value in (None, "") for c in range(1, ws.max_column + 1)):
-                continue
-            yield ws.title, col, ws, r
-
-
-def _get_cell(ws, r, colmap, key, default=None):
-    aliases = {
-        "platform": ["platform", "channel", "source_platform"],
-        "season": ["season", "campaign", "promo", "season_label"],
-        "segment": ["segment", "audience", "cohort"],
-        "conv_rate": ["conv_rate", "cvr", "conversion_rate", "links_cvr", "metric"],
-
-        "repurchase_rate": ["repurchase_rate", "repeat_rate", "repurchase_cvr"],
-        "repurchase": ["repurchase", "repeat", "repeat_conversions"],
-        "unique_clickers": ["unique_clickers", "unique_clicker", "uniq_clickers", "uniq_clicker"],
-
-        "coupon_use_rate": ["coupon_use_rate", "coupon_rate", "coupon_redeem_rate"],
-        "coupon_used": ["coupon_used", "coupon_redeemed", "coupon_count"],
-        "conversions": ["conversions", "orders", "purchases", "buy"],
-
-        "month": ["month", "yyyymm", "period"],
-
-        "revenue": ["revenue", "sales", "gmv", "order_amount"],
-        "repurchase_revenue": ["repurchase_revenue", "repeat_revenue", "ltv_revenue"],
-        "coupon_discount_rate": ["coupon_discount_rate", "discount_rate", "coupon_rate_pct", "coupon_pct"],
-
-        "product_type": ["product_type", "product", "offer_type"],
+    url = "https://api.openai.com/v1/images/generations"
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
     }
-    keys = aliases.get(key, [key])
-    for k in keys:
-        if k in colmap:
-            v = ws.cell(r, colmap[k]).value
-            if v is None or v == "":
-                continue
-            return v
-    return default
+    payload = {
+        "model": MODEL,
+        "prompt": prompt,
+        "size": size,
+    }
 
-
-def update_ltv_from_xlsx(xlsx_path: Path, cfg_path: Path, month: str = "") -> dict:
-    cfg = _load_ev_config(cfg_path)
-    cfg.setdefault("default", {})
-
-    model = cfg["default"].get("ltv_model", {})
-    alpha = float(model.get("alpha_repurchase_rev_ratio", 0.8))
-    beta  = float(model.get("beta_coupon_discount", 0.5))
-    gamma = float(model.get("gamma_seasonpack_uplift", 0.15))
-
-    agg: Dict[str, Dict[str, List[float]]] = {}
-    seg_perf: Dict[str, List[float]] = {"new": [], "repeat": []}
-
-    for _, colmap, ws, r in _iter_rows_with_headers(xlsx_path):
-        plat = _get_cell(ws, r, colmap, "platform")
-        if plat is None:
-            continue
-        plat = str(plat).strip().lower()
-
-        if month:
-            mcol = _get_cell(ws, r, colmap, "month")
-            if mcol is not None and str(mcol).strip() != str(month).strip():
-                continue
-
-        if plat not in agg:
-            agg[plat] = {
-                "repurchase_rate": [],
-                "coupon_use_rate": [],
-                "revenue": [],
-                "repurchase_revenue": [],
-                "coupon_discount_rate": [],
-                "seasonpack_flag": [],
-            }
-
-        rr = _to_float(_get_cell(ws, r, colmap, "repurchase_rate"))
-        if rr is None:
-            rep = _to_float(_get_cell(ws, r, colmap, "repurchase"))
-            uc = _to_float(_get_cell(ws, r, colmap, "unique_clickers"))
-            if rep is not None and uc and uc > 0:
-                rr = rep / uc
-        if rr is not None:
-            agg[plat]["repurchase_rate"].append(float(rr))
-
-        cur = _to_float(_get_cell(ws, r, colmap, "coupon_use_rate"))
-        if cur is None:
-            cu = _to_float(_get_cell(ws, r, colmap, "coupon_used"))
-            conv = _to_float(_get_cell(ws, r, colmap, "conversions"))
-            if cu is not None and conv and conv > 0:
-                cur = cu / conv
-        if cur is not None:
-            agg[plat]["coupon_use_rate"].append(float(cur))
-
-        rev = _to_float(_get_cell(ws, r, colmap, "revenue"))
-        rep_rev = _to_float(_get_cell(ws, r, colmap, "repurchase_revenue"))
-        disc = _to_float(_get_cell(ws, r, colmap, "coupon_discount_rate"))
-        if disc is not None and disc > 1.0:
-            disc = disc / 100.0
-
-        if rev is not None:
-            agg[plat]["revenue"].append(float(rev))
-        if rep_rev is not None:
-            agg[plat]["repurchase_revenue"].append(float(rep_rev))
-        if disc is not None:
-            agg[plat]["coupon_discount_rate"].append(float(disc))
-
-        ptype = _get_cell(ws, r, colmap, "product_type", default="standard")
-        agg[plat]["seasonpack_flag"].append(1.0 if str(ptype).strip().lower() == "seasonpack" else 0.0)
-
-        seg = str(_get_cell(ws, r, colmap, "segment", default="")).strip().lower()
-        cvr = _to_float(_get_cell(ws, r, colmap, "conv_rate"))
-        if seg in seg_perf and cvr is not None:
-            seg_perf[seg].append(float(cvr))
-
-    # platform ltv_weight
-    for plat, vals in agg.items():
-        rr_avg = sum(vals["repurchase_rate"]) / len(vals["repurchase_rate"]) if vals["repurchase_rate"] else None
-        cur_avg = sum(vals["coupon_use_rate"]) / len(vals["coupon_use_rate"]) if vals["coupon_use_rate"] else None
-
-        base = 1.0
-        if vals["revenue"] and vals["repurchase_revenue"] and sum(vals["revenue"]) > 0:
-            rep_ratio = sum(vals["repurchase_revenue"]) / max(1.0, sum(vals["revenue"]))
-            base += alpha * float(rep_ratio)
-        elif rr_avg is not None:
-            base += 0.6 * float(rr_avg)
-
-        if vals["coupon_discount_rate"]:
-            avg_disc = sum(vals["coupon_discount_rate"]) / len(vals["coupon_discount_rate"])
-            base -= beta * float(avg_disc)
-        elif cur_avg is not None:
-            base += 0.2 * float(cur_avg)
-
-        sp_share = sum(vals["seasonpack_flag"]) / len(vals["seasonpack_flag"]) if vals["seasonpack_flag"] else 0.0
-        base += gamma * float(sp_share)
-
-        ltv = _clamp(base, 0.8, 2.5)
-        cfg.setdefault(plat, {})
-        if isinstance(cfg[plat], dict):
-            cfg[plat]["ltv_weight"] = round(ltv, 4)
-
-    # repeat multiplier
-    try:
-        new_avg = sum(seg_perf["new"]) / len(seg_perf["new"]) if seg_perf["new"] else None
-        rep_avg = sum(seg_perf["repeat"]) / len(seg_perf["repeat"]) if seg_perf["repeat"] else None
-        if new_avg and rep_avg and new_avg > 0:
-            mult = _clamp(rep_avg / new_avg, 1.0, 1.6)
-            cfg["default"].setdefault("segment_ltv_mult", {})
-            if isinstance(cfg["default"]["segment_ltv_mult"], dict):
-                cfg["default"]["segment_ltv_mult"]["repeat"] = round(mult, 4)
-    except Exception:
-        pass
-
-    cfg_path.write_text(json.dumps(cfg, ensure_ascii=False, indent=2), encoding="utf-8")
-    return cfg
-
-
-# ----------------------------
-# One-click pipeline wrappers
-# ----------------------------
-
-def cmd_update_ltv(args) -> int:
-    xlsx = Path(args.xlsx)
-    cfgp = Path(args.platform_ev_config)
-    update_ltv_from_xlsx(xlsx, cfgp, month=args.month)
-    print("Updated:", cfgp)
-    return 0
-
-
-def cmd_run_week(args) -> int:
-    platforms = [p.strip() for p in args.platforms.split(",") if p.strip()]
-    segments = [s.strip() for s in args.segments.split(",") if s.strip()]
-    out_root = Path(args.out_dir)
-    _ensure_dir(out_root)
-
-    # optional background server
-    server_proc = None
-    if args.auto_server:
-        server_cmd = [sys.executable, str(ROOT/"server_webhook_platforms.py"), "--port", str(args.server_port)]
-        server_proc = _popen(server_cmd, cwd=ROOT)
-        time.sleep(0.8)  # give it a moment
-
-    # forward extra args to run_generate.py
-    forward = args.forward_args or []
-
-    rc = 0
-    for plat in platforms:
-        for seg in segments:
-            out_dir = out_root / f"{args.season}" / plat / seg
-            _ensure_dir(out_dir)
-
-            cmd = [
-                sys.executable, str(ROOT/"run_generate.py"),
-                "--season", args.season,
-                "--platform", plat,
-                "--segment", seg,
-                "--days", str(args.days),
-                "--format", args.format,
-                "--mode", args.mode,
-                "--offer_code", args.offer_code,
-                "--message_out", str(out_dir/"message_payload.json"),
-                "--log_xlsx", str(Path(args.log_xlsx) if args.log_xlsx else out_root/"performance_log.xlsx"),
-                "--platform_ev_config", str(args.platform_ev_config) if args.platform_ev_config else str(ROOT/"platform_ev_config.json"),
-            ]
-
-            if args.deadline:
-                cmd += ["--deadline", args.deadline]
-            if args.deadline_time:
-                cmd += ["--deadline_time", args.deadline_time]
-            if args.upload_backend:
-                cmd += ["--upload_backend", args.upload_backend]
-            if args.require_stable_urls:
-                cmd += ["--require_stable_urls"]
-            if args.send_messages:
-                cmd += ["--send_messages", "--sender", args.sender, "--sender_config", args.sender_config]
-            if args.dry_run:
-                cmd += ["--dry_run"]
-
-            # pass-through args after --
-            if forward:
-                cmd += forward
-
-            print("\n[RUN]", " ".join(cmd))
-            rc = _run(cmd, cwd=ROOT)
-            if rc != 0:
-                print("❌ run_generate failed for", plat, seg, "rc=", rc)
-                break
-        if rc != 0:
-            break
-
-    if server_proc:
+    r = requests.post(url, headers=headers, json=payload, timeout=TIMEOUT_SEC)
+    if r.status_code != 200:
+        # 에러 메시지 최대한 보기 쉽게
         try:
-            server_proc.terminate()
-            server_proc.wait(timeout=5)
+            detail = r.json()
         except Exception:
-            try:
-                server_proc.kill()
-            except Exception:
-                pass
+            detail = r.text
+        raise RuntimeError(f"이미지 생성 실패 (HTTP {r.status_code}): {detail}")
 
-    return int(rc)
+    data = r.json()
+    # 일반적으로 b64_json 형태로 옴
+    b64 = data["data"][0].get("b64_json")
+    if not b64:
+        raise RuntimeError(f"이미지 응답에 b64_json이 없습니다: {data}")
 
+    return base64.b64decode(b64)
 
-def build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(description="Alloki & Dalloki Unified Suite (One Program)")
-    sub = p.add_subparsers(dest="cmd", required=True)
+# -----------------------------
+# 시즌팩/기간팩 문구 분기
+# -----------------------------
+def pick_copy(offer_code: str, season_key: str) -> dict:
+    oc = (offer_code or "").upper().strip()
 
-    rw = sub.add_parser("run_week", help="One-click: generate this week's sets (platform x segment) via run_generate.py")
-    rw.add_argument("--season", required=True, help="e.g., spring / yearend / promo_d-3")
-    rw.add_argument("--platforms", default="instagram,tiktok", help="comma list")
-    rw.add_argument("--segments", default="new,repeat", help="comma list")
-    rw.add_argument("--days", type=int, default=7, help="card count (7/14/21). Note: 21 usually seasonpack.")
-    rw.add_argument("--offer_code", default="D7", help="D7/D14/D21/SEASONPACK... forwarded to run_generate")
-    rw.add_argument("--format", default="both", help="square|story|both")
-    rw.add_argument("--mode", default="paid", help="paid|free-lock etc (depends on run_generate)")
-    rw.add_argument("--out_dir", default="./out_week", help="output root")
-    rw.add_argument("--log_xlsx", default="./performance_log.xlsx", help="performance log xlsx")
-    rw.add_argument("--platform_ev_config", default="./platform_ev_config.json", help="EV/LTV config json")
+    # 시즌팩이면 시즌명 붙인 문구로 변경
+    if oc == "SEASONPACK":
+        season_kr = {
+            "spring": "봄",
+            "summer": "여름",
+            "autumn": "가을",
+            "winter": "겨울",
+            "yearend_bundle": "연말",
+        }.get(season_key, "시즌")
 
-    rw.add_argument("--deadline", default="", help="YYYY-MM-DD (optional)")
-    rw.add_argument("--deadline_time", default="", help="HH:MM (optional)")
-    rw.add_argument("--auto_server", action="store_true", help="start webhook server in background during generation")
-    rw.add_argument("--server_port", type=int, default=8787)
+        return {
+            "A": f"{season_kr} 시즌팩 21+3 · 오늘의 마음을 꺼내요",
+            "B": f"{season_kr} 시즌팩 21+3 · 지금 안 사면 늦어요",
+            "C": f"{season_kr} 시즌팩 21+3 · 프리미엄 한정",
+        }
 
-    rw.add_argument("--upload_backend", default="", help="s3|gdrive|none")
-    rw.add_argument("--require_stable_urls", action="store_true")
-    rw.add_argument("--send_messages", action="store_true")
-    rw.add_argument("--sender", default="kakao", help="kakao|sms")
-    rw.add_argument("--sender_config", default=str(ROOT/"sender_config.json"))
-    rw.add_argument("--dry_run", action="store_true")
+    # 기간팩(예: 7일/14일/21일)
+    if oc == "D7":
+        return {"A": "7일 카드 · 오늘의 마음", "B": "7일 카드 · 지금 시작", "C": "7일 카드 · 가볍게 힐링"}
+    if oc == "D14":
+        return {"A": "14일 카드 · 마음 회복", "B": "14일 카드 · 놓치면 후회", "C": "14일 카드 · 더 깊게"}
+    if oc == "D21":
+        return {"A": "21일 카드 · 마음 루틴", "B": "21일 카드 · 지금이 타이밍", "C": "21일 카드 · 프리미엄 감성"}
 
-    # Everything after -- will be forwarded to run_generate.py
-    rw.add_argument("forward_args", nargs=argparse.REMAINDER, help="Use `-- <args...>` to pass through to run_generate.py")
-    rw.set_defaults(func=cmd_run_week)
+    # 기본
+    return THUMB_COPY_DEFAULT.copy()
 
-    ul = sub.add_parser("update_ltv", help="Update platform_ev_config.json using real data from performance xlsx")
-    ul.add_argument("--xlsx", required=True)
-    ul.add_argument("--platform_ev_config", default="./platform_ev_config.json")
-    ul.add_argument("--month", default="", help="optional: YYYY-MM")
-    ul.set_defaults(func=cmd_update_ltv)
+# -----------------------------
+# 프롬프트 조합
+# -----------------------------
+def build_prompt(season_key: str, extra_text: str) -> str:
+    lines = list(BASE_PROMPT_LINES)
+    if season_key in SEASON_ADDONS:
+        lines.append(SEASON_ADDONS[season_key])
+    if extra_text and extra_text.strip():
+        lines.append(extra_text.strip())
+    return "\n".join(lines)
 
-    return p
+# -----------------------------
+# UI
+# -----------------------------
+st.markdown("## 🐼 알록이 & 달록이 앱")
+st.caption("Streamlit 배포 성공 ✅  이제 버튼 클릭 시 ‘진짜 이미지 생성’까지 연결합니다.")
 
+with st.sidebar:
+    st.markdown("### 설정")
+    season_key = st.selectbox(
+        "시즌 선택",
+        options=["spring", "summer", "autumn", "winter", "yearend_bundle"],
+        format_func=lambda x: {
+            "spring":"봄(spring)",
+            "summer":"여름(summer)",
+            "autumn":"가을(autumn)",
+            "winter":"겨울(winter)",
+            "yearend_bundle":"연말 번들(yearend_bundle)"
+        }.get(x, x),
+        index=0
+    )
 
-def main(argv: List[str] | None = None) -> int:
-    parser = build_parser()
-    args = parser.parse_args(argv)
-    return int(args.func(args))
+    offer_code = st.selectbox(
+        "상품/분기(시즌팩/기간팩)",
+        options=["", "SEASONPACK", "D7", "D14", "D21"],
+        format_func=lambda x: {
+            "":"(기본)",
+            "SEASONPACK":"SEASONPACK (시즌팩 21+3)",
+            "D7":"D7 (7일)",
+            "D14":"D14 (14일)",
+            "D21":"D21 (21일)"
+        }.get(x, x),
+        index=0
+    )
 
+    extra_text = st.text_area(
+        "추가 요청(선택)",
+        placeholder="예) cozy living room, soft bokeh sparkles, ultra fluffy fur, disney-like illustration",
+        height=120
+    )
 
-if __name__ == "__main__":
-    raise SystemExit(main())
+st.markdown("### 1️⃣ 버튼 클릭 → 실제 동작 연결")
+st.write("**알록이 시작하기**를 누르면 👉 이미지 생성 + 문구 생성 + 시즌팩 분기 결과를 바로 보여줍니다.")
+
+btn = st.button("🐶 알록이 시작하기", use_container_width=True)
+
+if btn:
+    try:
+        with st.status("v60 실행중… 진짜 이미지 생성하는 중 🧸", expanded=True) as status:
+            prompt = build_prompt(season_key, extra_text)
+            st.code(prompt, language="text")
+
+            img_bytes = openai_generate_image(prompt, size=IMAGE_SIZE)
+            copy_dict = pick_copy(offer_code, season_key)
+
+            status.update(label="✅ 생성 완료!", state="complete", expanded=False)
+
+        st.success("✅ v60 연결 성공! (진짜 이미지 생성 완료)")
+
+        st.markdown("### 🖼️ 생성된 이미지")
+        st.image(img_bytes, use_container_width=True)
+
+        st.markdown("### 📝 문구(A/B/C)")
+        col1, col2, col3 = st.columns(3)
+        col1.write(f"**A**: {copy_dict['A']}")
+        col2.write(f"**B**: {copy_dict['B']}")
+        col3.write(f"**C**: {copy_dict['C']}")
+
+        # 다운로드
+        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        st.download_button(
+            label="⬇️ 이미지 다운로드(PNG)",
+            data=img_bytes,
+            file_name=f"alloki_dalloki_{season_key}_{ts}.png",
+            mime="image/png",
+            use_container_width=True,
+        )
+
+    except Exception as e:
+        st.error(f"❌ 실행 실패: {e}")
+
+# 도움말/체크
+st.markdown("---")
+st.markdown("### ✅ 체크리스트")
+st.write("- Streamlit Secrets에 `OPENAI_API_KEY`가 들어있나요?")
+st.write("- 버튼 누르면 아래에 **이미지 + 문구**가 바로 뜨나요?")
+st.write("- 시즌을 바꾸면 분위기/문구가 바뀌나요?")
